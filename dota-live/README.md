@@ -40,6 +40,7 @@ Guarda el `token` que devuelve; solo se muestra una vez. Configura el cliente GS
 - `GET /health`
 - `POST /api/v1/clients` (X-Admin-Key)
 - `POST /api/v1/gsi` (Bearer token del cliente)
+- `GET /api/v1/gsi/config` (Bearer token del cliente; descarga del archivo GSI para el ejecutable)
 - `GET /api/v1/dashboard` (X-Dashboard-Key)
 - `GET /api/v1/players/:id` (X-Dashboard-Key)
 - `GET /api/v1/stats/progress?days=30` (X-Dashboard-Key)

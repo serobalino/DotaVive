@@ -1,0 +1,11 @@
+#!/bin/sh
+APP_CONTENTS="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+CLIENT_BIN="$APP_CONTENTS/Resources/dota-gsi-client"
+/usr/bin/osascript - "$CLIENT_BIN" <<'APPLESCRIPT'
+on run argv
+    tell application "Terminal"
+        activate
+        do script "exec " & quoted form of (item 1 of argv)
+    end tell
+end run
+APPLESCRIPT

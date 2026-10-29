@@ -18,6 +18,25 @@ function advice(snap,raw){let suggestions=[];let ratio=snap.maxHealth>0?snap.hea
 function publicSnapshot(r,raw){return {gameTimeSeconds:r.game_time_seconds,heroName:r.hero_name,heroLevel:r.hero_level,health:r.health,maxHealth:r.max_health,mana:r.mana,maxMana:r.max_mana,gold:r.gold,kills:r.kills,deaths:r.deaths,assists:r.assists,receivedAt:r.received_at,matchId:r.match_id,externalMatchId:r.external_match_id,gameState:r.game_state,matchIsActive:!!r.match_is_active,heroImage:icon('hero',r.hero_name),items:items(raw),abilities:abilities(raw),recommendation:advice(r,raw)}}
 app.get('/health',async(_q,res)=>{try{await pool.query('SELECT 1');res.json({status:'ok',database:'connected'})}catch{res.status(503).json({status:'degraded',database:'disconnected'})}});
 app.post('/api/v1/clients',admin,async(req,res,next)=>{try{if(!req.body.clientName)return res.status(400).json({error:'clientName_required'});let token=crypto.randomBytes(32).toString('hex'),hash=crypto.createHash('sha256').update(token).digest('hex'),uuid=crypto.randomUUID();let [r]=await pool.execute('INSERT INTO clients(client_uuid,client_name,platform,label,token_hash) VALUES(?,?,?,?,?)',[uuid,String(req.body.clientName).slice(0,120),s(req.body.platform),s(req.body.label),hash]);res.status(201).json({clientId:r.insertId,clientUuid:uuid,token,warning:'Guarda este token; no se almacena en texto claro.'})}catch(e){next(e)}});
+app.get('/api/v1/gsi/config',clientAuth,(_req,res)=>{res.type('text/plain').send(`"Dota 2 GSI"
+{
+    "uri"               "http://127.0.0.1:3000/gsi"
+    "timeout"           "5.0"
+    "buffer"            "0.1"
+    "throttle"          "0.1"
+    "heartbeat"         "30.0"
+    "data"
+    {
+        "provider"      "1"
+        "map"           "1"
+        "player"         "1"
+        "hero"           "1"
+        "abilities"      "1"
+        "items"          "1"
+        "draft"          "1"
+        "wearables"      "0"
+    }
+}`)});
 app.post('/api/v1/gsi',clientAuth,async(req,res,next)=>{let c;try{c=await pool.getConnection();let p=req.body||{},map=p.map||{},player=p.player||{},hero=p.hero||{},ext=map.matchid?String(map.matchid):null,steam=player.steamid?String(player.steamid):null;await c.beginTransaction();await c.execute('UPDATE clients SET last_seen_at=UTC_TIMESTAMP(3) WHERE id=?',[req.client.id]);let playerId=null;if(steam){await c.execute('INSERT INTO players(steam_id,player_name) VALUES(?,?) ON DUPLICATE KEY UPDATE player_name=COALESCE(VALUES(player_name),player_name),last_seen_at=UTC_TIMESTAMP(3)',[steam,s(player.name)]);let [pr]=await c.execute('SELECT id FROM players WHERE steam_id=?',[steam]);playerId=pr[0]?.id||null}let matchId=null;if(ext){await c.execute('INSERT INTO matches(external_match_id,map_name,game_mode,game_state,game_time_seconds,radiant_score,dire_score,is_active,started_at,last_seen_at) VALUES(?,?,?,?,?,?,?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE map_name=VALUES(map_name),game_mode=VALUES(game_mode),game_state=VALUES(game_state),game_time_seconds=VALUES(game_time_seconds),radiant_score=VALUES(radiant_score),dire_score=VALUES(dire_score),is_active=VALUES(is_active),last_seen_at=UTC_TIMESTAMP(3)',[ext,s(map.name),s(map.gamemode),s(map.game_state),n(map.clock_time),n(map.radiant_score),n(map.dire_score),active(map)]);let [mr]=await c.execute('SELECT id FROM matches WHERE external_match_id=?',[ext]);matchId=mr[0]?.id;if(matchId)await c.execute('INSERT INTO match_players(match_id,player_id,client_id,hero_name,team_name,player_slot) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE player_id=VALUES(player_id),hero_name=VALUES(hero_name),team_name=VALUES(team_name),player_slot=VALUES(player_slot),last_seen_at=UTC_TIMESTAMP(3)',[matchId,playerId,req.client.id,s(hero.name),s(player.team_name),n(player.player_slot)])}
 let vals=[req.client.id,matchId,playerId,n(map.clock_time),s(hero.name),n(hero.level),n(hero.health),n(hero.max_health),n(hero.mana),n(hero.max_mana),n(player.gold),n(player.kills),n(player.deaths),n(player.assists),JSON.stringify(p)];await c.execute('INSERT INTO gsi_snapshots(client_id,match_id,player_id,game_time_seconds,hero_name,hero_level,health,max_health,mana,max_mana,gold,kills,deaths,assists,raw_payload) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',vals);await c.commit();let snap={clientId:req.client.id,clientName:req.client.client_name,gameTimeSeconds:n(map.clock_time),heroName:s(hero.name),heroLevel:n(hero.level),health:n(hero.health),maxHealth:n(hero.max_health),mana:n(hero.mana),maxMana:n(hero.max_mana),gold:n(player.gold),kills:n(player.kills),deaths:n(player.deaths),assists:n(player.assists),matchId,externalMatchId:ext,gameState:s(map.game_state),matchIsActive:active(map),receivedAt:new Date().toISOString(),heroImage:icon('hero',hero.name),items:items(p),abilities:abilities(p),recommendation:advice({health:n(hero.health),maxHealth:n(hero.max_health),gold:n(player.gold)},p)};global.broadcast?.({type:'player.updated',data:snap});res.status(202).json({accepted:true,clientId:req.client.id,matchId})}catch(e){if(c)await c.rollback().catch(()=>{});next(e)}finally{c?.release()}});
 

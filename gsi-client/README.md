@@ -1,111 +1,74 @@
-# Dota 2 GSI Client (Go) — compilación con Docker Compose
+# Cliente Dota 2 GSI (Go)
 
-Cliente inicial multiplataforma para recibir eventos **Game State Integration (GSI)** de Dota 2 en la computadora donde se ejecuta el juego y reenviarlos a un API Node.js en tu NAS Synology.
+Cliente multiplataforma de consola para recibir Game State Integration (GSI) de Dota 2 y reenviarlo al backend Dota Live. Al abrirlo pide `API_URL` y `API_TOKEN`, descarga la configuración GSI autenticándose contra el backend, la instala en la carpeta detectada de Dota 2 y muestra en el terminal el estado de recepción y reenvío.
 
-## Arquitectura
+## Compilar
 
-`Dota 2 → cliente local Go (127.0.0.1:3000) → API Node.js del NAS → IA / web para TV`
-
-El cliente escucha solo en `127.0.0.1` por defecto: Dota 2 puede conectarse localmente y otros equipos de la red no pueden enviarle peticiones directamente.
-
-## Requisitos
-
-- Docker Desktop instalado y en ejecución (Windows o macOS).
-- Dota 2 instalado en la computadora donde se ejecutará el cliente.
-- Un API accesible desde esa computadora en el NAS. El API debe aceptar un `POST` con el JSON GSI.
-
-## 1. Compilar dentro de Docker Compose
-
-Descomprime el ZIP y abre una terminal en la carpeta `dota-gsi-client`.
+Con Docker Desktop:
 
 ```bash
 docker compose run --rm builder
 ```
 
-Los ejecutables se generan en `output/`:
-- `dota-gsi-windows-amd64.exe`
-- `dota-gsi-darwin-amd64` (Mac Intel)
-- `dota-gsi-darwin-arm64` (Mac Apple Silicon)
+Los ejecutables se generan en `output/`: `Dota GSI.exe` para Windows x64 y `Dota GSI-amd64.app` / `Dota GSI-arm64.app` para macOS Intel y Apple Silicon. El `.exe` incorpora el icono de Windows. En Mac, abre el paquete `.app`; este abre Terminal para conservar los prompts y el feedback del cliente. También se dejan los binarios macOS sueltos dentro de `output/`.
 
-Esto genera **ejecutables**, no instaladores firmados. En macOS, Gatekeeper puede mostrar advertencias para binarios propios; Windows también puede mostrar advertencias de SmartScreen.
+La compilación local con `go build` solo produce el binario y no incluye estos iconos ni el paquete `.app`; usa Docker Compose para generar los artefactos listos con icono.
 
-## 2. Configurar el cliente
-
-Crea una copia de `.env.example` llamada `.env` y configura:
-
-```dotenv
-GSI_LISTEN_ADDR=127.0.0.1:3000
-API_URL=http://192.168.68.XX:3200/api/dota/gsi
-API_TOKEN=cambia-este-token
-HTTP_TIMEOUT_SECONDS=3
-```
-
-Cambia `API_URL` por la dirección y ruta reales de tu API Node.js en el NAS. `API_TOKEN` se envía como `Authorization: Bearer ...`. Si el API aún no valida ese encabezado, puedes dejar `API_TOKEN` vacío durante una prueba local.
-
-> Usa la IP real de tu NAS y el puerto publicado por Docker. No expongas el puerto del cliente GSI a Internet.
-
-## 3. Ejecutar el cliente
-
-Windows PowerShell:
-
-```powershell
-$env:GSI_LISTEN_ADDR="127.0.0.1:3000"
-$env:API_URL="http://192.168.68.XX:3200/api/dota/gsi"
-$env:API_TOKEN="cambia-este-token"
-.\output\dota-gsi-windows-amd64.exe
-```
-
-macOS (Apple Silicon):
+Para compilar solo el binario en una máquina con Go:
 
 ```bash
-export GSI_LISTEN_ADDR=127.0.0.1:3000
-export API_URL=http://192.168.68.XX:3200/api/dota/gsi
-export API_TOKEN=cambia-este-token
-chmod +x output/dota-gsi-darwin-arm64
-./output/dota-gsi-darwin-arm64
+go build -o output/dota-gsi-client ./cmd/client
 ```
 
-El cliente muestra en consola el estado de las peticiones y los errores de envío. Mantén la aplicación ejecutándose mientras juegas.
+## Ejecutar y configurar
 
-## 4. Configurar Dota 2
+Abre el ejecutable desde un terminal. Ingresa:
 
-Copia `gamestate_integration_dota2.cfg` a la carpeta `game/dota/cfg/gamestate_integration` de la instalación de Dota 2.
+- `API_URL`: URL completa del endpoint GSI, por ejemplo `http://IP_SRV:3210/api/v1/gsi`.
+- `API_TOKEN`: token individual creado en el backend. Puede dejarse vacío solo si el backend no requiere autenticación.
 
-Rutas habituales:
-- Windows: `...\Steam\steamapps\common\dota 2 beta\game\dota\cfg\gamestate_integration\`
-- macOS: `~/Library/Application Support/Steam/steamapps/common/dota 2 beta/game/dota/cfg/gamestate_integration/` (la ruta exacta puede variar según dónde esté instalada la biblioteca de Steam).
+El cliente obtiene el archivo desde `GET /api/v1/gsi/config` usando ese mismo token. Por ello, `API_URL` debe terminar en `/gsi`. No necesita archivo `.env` ni variables de entorno. Después de descargar e instalar la configuración con éxito, guarda la URL y el token localmente para sugerirlos la próxima vez; basta con pulsar Enter para reutilizar cada valor. El archivo queda en la carpeta de configuración del usuario (`dota-gsi-client/config.json`) con permisos privados cuando el sistema los admite. El token se guarda en texto claro dentro de ese archivo, así que mantenlo protegido. Los valores locales por defecto son `127.0.0.1:3000` y timeout HTTP de 10 segundos.
 
-Si la carpeta `gamestate_integration` no existe, créala. El nombre del archivo debe empezar por `gamestate_integration_` y terminar en `.cfg`.
+El ejecutable busca Dota 2 en las bibliotecas Steam habituales, crea `game/dota/cfg/gamestate_integration` si hace falta e instala `gamestate_integration_dota2.cfg`. Si no encuentra Dota 2, revisa que esté instalado y que Steam tenga actualizado `steamapps/libraryfolders.vdf`.
 
-El archivo de ejemplo envía GSI a `http://127.0.0.1:3000/gsi`. Reinicia Dota 2 después de añadirlo.
+Ejemplo de URL para Dota Live:
 
-## 5. Probar sin Dota 2
-
-Con el cliente ejecutándose, puedes enviar un JSON de prueba desde otra terminal de la misma computadora:
-
-```bash
-curl -X POST http://127.0.0.1:3000/gsi \
-  -H "Content-Type: application/json" \
-  -d '{"map":{"name":"test"},"player":{"activity":"playing"}}'
+```text
+http://IP_SRV:3210/api/v1/gsi
 ```
 
-El cliente intentará reenviar el JSON a `API_URL`. Si no has iniciado el API del NAS, verás un error de envío; eso es normal para esta prueba.
+Después de instalar el archivo, inicia o reinicia Dota 2. Mantén el cliente abierto durante la partida. El listener local solo acepta conexiones en `127.0.0.1:3000`.
 
-## Contrato esperado del API Node.js
+## Contrato del backend
 
-El API del NAS debería aceptar:
-- Método: `POST`
-- Ruta: la configurada en `API_URL`
-- `Content-Type: application/json`
-- Opcional: `Authorization: Bearer <API_TOKEN>`
-- Cuerpo: JSON original de GSI
+El backend debe exponer:
 
-El cliente devuelve `200 OK` a Dota cuando el JSON se recibió correctamente, aunque el API del NAS esté caído. Los fallos de reenvío se registran en la consola; así, un problema temporal del NAS no bloquea la recepción local de GSI.
+- `GET /api/v1/gsi/config` con `Authorization: Bearer <API_TOKEN>` para entregar el archivo Valve `.cfg` como texto plano.
+- `POST /api/v1/gsi` con el mismo encabezado para recibir el JSON GSI.
 
-## Limitaciones de esta versión inicial
+El cliente devuelve `200 OK` a Dota al recibir un JSON válido, aunque el reenvío al backend falle; el error se muestra en la consola.
 
-- Es un cliente de consola, no una aplicación con interfaz gráfica ni un servicio de inicio automático.
-- No instala automáticamente el archivo `.cfg`; debes copiarlo manualmente.
-- No incluye todavía el API Node.js del NAS ni la lógica de IA.
-- El endpoint del NAS debe existir y ser accesible desde la PC.
-- Para jugar desde dos computadoras a la vez, ejecuta un cliente en cada una y añade una identidad de jugador en una versión posterior del protocolo/API.
+## Uso de Red
+
+Estimaciones referenciales del tráfico que el cliente reenvía al backend. Se calculan con la frecuencia y el tamaño promedio indicados; el uso real cambia según las actualizaciones GSI que genere la partida. La configuración usa `throttle = 0.1 s` como referencia para un máximo aproximado de 10 envíos por segundo, aunque Dota puede comportarse de forma distinta.
+
+| Escenario | Supuesto | Tráfico aproximado |
+|---|---:|---:|
+| Menú o poca actividad | 2 envíos/s × 2 KB | 14 MB por hora |
+| Partida, referencia intermedia | 5 envíos/s × 5 KB | 90 MB por hora |
+| Partida, escenario alto | Hasta 10 envíos/s × 10 KB | 360 MB por hora |
+
+Fórmula de referencia: `envíos por segundo × tamaño promedio del paquete × tiempo`. Si el backend está en la intranet, este tráfico circula por la red local y no consume datos de Internet. Solo saldrá a Internet si se accede al backend mediante una dirección pública, una VPN o una ruta externa. La descarga del archivo de configuración al iniciar el cliente es pequeña.
+
+## Recursos locales
+
+Estimaciones referenciales del cliente en el computador donde se ejecuta Dota 2; no incluyen CPU ni memoria del backend. El cliente no renderiza gráficos ni utiliza la GPU de forma significativa.
+
+| Recurso local | Uso aproximado |
+|---|---:|
+| CPU | Cerca de 0–1 % en promedio en un equipo moderno |
+| Memoria | Aproximadamente 10–30 MB |
+| GPU | Prácticamente 0 % |
+| Disco durante el juego | Mínimo; los mensajes se muestran en el terminal y no se guardan continuamente en un archivo |
+
+Estas cifras son estimaciones, no resultados de un benchmark en cada computador. No se espera una diferencia apreciable en los FPS de Dota 2.
