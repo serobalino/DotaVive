@@ -48,6 +48,34 @@ El backend debe exponer:
 
 El cliente devuelve `200 OK` a Dota al recibir un JSON válido, aunque el reenvío al backend falle; el error se muestra en la consola.
 
+## Registrar el cliente y guardar su token
+
+1. En el `.env` del backend, configura `API_ADMIN_KEY` con una clave administrativa propia. Si la agregas o cambias, reinicia el servicio API.
+
+2. Desde una computadora con acceso al backend, registra cada instalación. Usa la clave administrativa `API_ADMIN_KEY` configurada en el servidor; no uses aquí el token individual del cliente.
+
+   macOS o Linux:
+
+   ```bash
+   curl -X POST http://IP_DEL_SRV:3210/api/v1/clients \
+     -H 'Content-Type: application/json' \
+     -H 'X-Admin-Key: TU_API_ADMIN_KEY' \
+     -d '{"clientName":"PC Sala","platform":"macos","label":"Jugador 1"}'
+   ```
+
+   Windows PowerShell:
+
+   ```powershell
+   $body = @{ clientName = "PC Sala"; platform = "windows"; label = "Jugador 1" } | ConvertTo-Json
+   Invoke-RestMethod -Method Post `
+     -Uri "http://IP_DEL_SRV:3210/api/v1/clients" `
+     -Headers @{"X-Admin-Key" = "TU_API_ADMIN_KEY"} `
+     -ContentType "application/json" `
+     -Body $body
+   ```
+
+3. Guarda el valor `token` que devuelve la API: solo se muestra una vez. Al abrir Dota GSI en esa computadora, usa `http://IP_DEL_SRV:3210/api/v1/gsi` como `API_URL` y ese valor como `API_TOKEN`. Registra cada computadora por separado para obtener un token individual; Dota GSI guardará la configuración localmente para las próximas ejecuciones.
+
 ## Uso de Red
 
 Estimaciones referenciales del tráfico que el cliente reenvía al backend. Se calculan con la frecuencia y el tamaño promedio indicados; el uso real cambia según las actualizaciones GSI que genere la partida. La configuración usa `throttle = 0.1 s` como referencia para un máximo aproximado de 10 envíos por segundo, aunque Dota puede comportarse de forma distinta.
