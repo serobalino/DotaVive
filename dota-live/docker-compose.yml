@@ -1,0 +1,15 @@
+services:
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 3210
+    ports:
+      - "${API_PORT:-3210}:3210"
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on: [api]

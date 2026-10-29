@@ -1,0 +1,56 @@
+CREATE TABLE IF NOT EXISTS clients (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ client_uuid CHAR(36) NOT NULL UNIQUE,
+ client_name VARCHAR(120) NOT NULL,
+ platform VARCHAR(32), label VARCHAR(120),
+ token_hash CHAR(64) NOT NULL UNIQUE,
+ is_active BOOLEAN NOT NULL DEFAULT TRUE,
+ last_seen_at DATETIME(3), created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+ KEY ix_clients_active_seen(is_active,last_seen_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS players (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ steam_id VARCHAR(32) UNIQUE, player_name VARCHAR(120),
+ first_seen_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ last_seen_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS matches (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ external_match_id VARCHAR(64) UNIQUE, map_name VARCHAR(120), game_mode VARCHAR(80),
+ game_state VARCHAR(80), game_time_seconds INT, radiant_score INT, dire_score INT,
+ is_active BOOLEAN NOT NULL DEFAULT TRUE, started_at DATETIME(3), ended_at DATETIME(3),
+ last_seen_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS match_players (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, match_id BIGINT UNSIGNED NOT NULL,
+ player_id BIGINT UNSIGNED, client_id BIGINT UNSIGNED NOT NULL,
+ hero_name VARCHAR(100), team_name VARCHAR(32), player_slot INT,
+ first_seen_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ last_seen_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ UNIQUE KEY uq_match_client(match_id,client_id),
+ FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE CASCADE,
+ FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE SET NULL,
+ FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS gsi_snapshots (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, client_id BIGINT UNSIGNED NOT NULL,
+ match_id BIGINT UNSIGNED, player_id BIGINT UNSIGNED, game_time_seconds INT,
+ hero_name VARCHAR(100), hero_level INT, health INT, max_health INT, mana INT, max_mana INT,
+ gold INT, kills INT, deaths INT, assists INT, raw_payload JSON NOT NULL,
+ received_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ KEY ix_snapshots_client_received(client_id,received_at),
+ KEY ix_snapshots_match_received(match_id,received_at),
+ FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE,
+ FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE SET NULL,
+ FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS client_events (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, client_id BIGINT UNSIGNED NOT NULL,
+ event_type VARCHAR(64) NOT NULL, event_value VARCHAR(255), metadata JSON,
+ created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ KEY ix_client_events_client_created(client_id,created_at),
+ FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

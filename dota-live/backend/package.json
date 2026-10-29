@@ -1,0 +1,1 @@
+{"name":"dota-live-api","version":"1.0.0","private":true,"scripts":{"start":"node src/server.js"},"dependencies":{"express":"^4.21.2","mysql2":"^3.14.0","ws":"^8.18.0"}}
